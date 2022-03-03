@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Write;
-use std::ops::{Neg, AddAssign, MulAssign, DivAssign, SubAssign, Add, Sub};
+use std::ops::{Neg, AddAssign, MulAssign, DivAssign, SubAssign, Add, Sub, Mul, Div};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Vec3 {
@@ -8,6 +8,8 @@ pub struct Vec3 {
     pub y: f64,
     pub z: f64,
 }
+
+type Colour = Vec3;
 
 impl Vec3 {
 
@@ -88,16 +90,77 @@ impl MulAssign for Vec3 {
     }
 }
 
+impl Mul<f64> for Vec3 {
+    type Output = Self;
+
+    fn mul(self, other: f64) -> Vec3 {
+        Vec3 {
+            x: self.x * other,
+            y: self.y * other,
+            z: self.z * other
+        }
+    }
+}
+
+impl Mul<Vec3> for f64 {
+    type Output = Vec3;
+
+    fn mul(self, rhs: Vec3) -> Vec3 {
+        Vec3{
+            x: rhs.x * self,
+            y: rhs.y * self,
+            z: rhs.z * self
+        }
+    }
+}
+
+// impl Mul<i32> for Vec3 {
+//     type Output = Vec3;
+//
+//     fn mul(self, other: i32) -> Vec3 {
+//         Vec3 {
+//             x: self.x * other as f64,
+//             y: self.y * other as f64,
+//             z: self.z * other as f64
+//         }
+//     }
+// }
+//
+// impl Mul<Vec3> for i32 {
+//     type Output = Vec3;
+//
+//     fn mul(self, rhs: Vec3) -> Vec3 {
+//         Vec3{
+//             x: rhs.x * self as f64,
+//             y: rhs.y * self as f64,
+//             z: rhs.z * self as f64
+//         }
+//     }
+// }
+
+impl Div<f64> for Vec3 {
+    type Output = Vec3;
+
+    fn div(self, rhs: f64) -> Self::Output {
+        Vec3{
+            x: (self.x / rhs).ceil(),
+            y: (self.y / rhs).ceil(),
+            z: (self.z / rhs).ceil()
+        }
+    }
+}
+
 impl DivAssign for Vec3 {
     fn div_assign(&mut self, other: Self) {
         *self = Self {
-            x: self.x / other.x,
-            y: self.y / other.y,
-            z: self.z / other.z
+            x: (self.x / other.x).ceil(),
+            y: (self.y / other.y).ceil(),
+            z: (self.z / other.z).ceil()
         };
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct Ray {
     pub origin: Vec3,
     pub dir: Vec3
@@ -127,27 +190,32 @@ fn multiply_by(v: Vec3, t: f64) -> Vec3 {
 }
 
 fn divide_by(v: Vec3, t: f64) -> Vec3 {
-    multiply_by(v, (1/t as i32) as f64)
+    multiply_by(v, 1.0/t)
+    // (1.0/t) * v
 }
 
 fn unit_vector(v: Vec3) -> Vec3 {
     divide_by(v, v.length())
+    // v / v.length()
 }
 
 fn ray_colour(r: Ray) -> Vec3 {
     let unit_direction = unit_vector(r.dir);
     let t = 0.5 * (unit_direction.y + 1.0);
-    let one_minus_t = 1.0 - t;
-    let out = Vec3{x: 1.0, y:  1.0, z: 1.0}.multiply_by(one_minus_t) + (Vec3{x: 0.5, y: 0.7, z: 1.0}.multiply_by(t));
-    println!("out: {:?}",out);
-    return out;
+    // let out = Colour{x: 1.0, y:  1.0, z: 1.0}.multiply_by(one_minus_t) + (Colour{x: 0.5, y: 0.7, z: 1.0}.multiply_by(t));
+    // println!("r: {:?}",r);
+    // println!("unit dir: {:?}",unit_direction);
+    // println!("t: {:?}",t);
+    // println!("t: {:?}",t.ceil());
+    // println!("color: {:?}",(1.0 - t) * Colour{x: 1.0, y: 1.0, z: 1.0} + t * Colour{x: 0.5, y: 0.7, z: 1.0});
+    (1.0 - t) * Colour{x: 1.0, y: 1.0, z: 1.0} + t * Colour{x: 0.5, y: 0.7, z: 1.0}
 }
 
 fn write_colour(buffer: &mut File, pixel_colour: Vec3) {
 
-    let ir = (255.999 * pixel_colour.x) as i32;
-    let ig = (255.999 * pixel_colour.y) as i32;
-    let ib = (255.999 * pixel_colour.z) as i32;
+    let ir = (255.999 * pixel_colour.x).ceil() as i32;
+    let ig = (255.999 * pixel_colour.y).ceil() as i32;
+    let ib = (255.999 * pixel_colour.z).ceil() as i32;
 
     let pixel = format!("{} {} {}\n", ir, ig, ib);
     buffer.write(&pixel.as_bytes());
@@ -157,7 +225,7 @@ fn main() -> std::io::Result<()> {
     // Image
     let aspect_ratio = 16.0 / 9.0;
     let image_width = 400;
-    let image_height = (image_width as f64 / aspect_ratio) as i32;
+    let image_height = (image_width as f64 / aspect_ratio).ceil() as i32;
 
     // Camera
     let viewport_height = 2.0;
@@ -167,25 +235,28 @@ fn main() -> std::io::Result<()> {
     let origin = Vec3{x: 0.0, y: 0.0, z: 0.0};
     let horizontal = Vec3{ x: viewport_width, y: 0.0, z: 0.0};
     let vertical = Vec3{ x: 0.0,  y: viewport_height, z: 0.0};
-    let lower_left_corner = origin - divide_by(horizontal, 2.0) - divide_by(vertical, 2.0) - Vec3{ x: 0.0, y: 0.0, z: focal_length};
-    println!("lower_left_corner: {:?}", lower_left_corner);
+    // let lower_left_corner = origin - divide_by(horizontal, 2.0) - divide_by(vertical, 2.0) - Vec3{ x: 0.0, y: 0.0, z: focal_length};
+    let lower_left_corner = origin - horizontal / 2.0 - vertical / 2.0 - Vec3{ x: 0.0, y: 0.0, z: focal_length};
+    // println!("lower_left_corner: {:?}", lower_left_corner);
+    // println!("hor / 2: {:?}", horizontal / 2.0);
+    // println!("ver / 2: {:?}", vertical / 2.0);
 
     let header = format!("P3\n{} {}\n255\n", image_width, image_height);
     let mut buffer = File::create("output.ppm")?;
     buffer.write(&header.as_bytes());
 
-    for j in (0..(image_height-1)).rev() {
+    for j in (0..image_height).rev() {
         println!("\r scan lines remaining: {}", j);
         for i in 0..image_width {
-            // let r = i as f64 / (image_width-1) as f64;
-            // let g = j as f64 / (image_height-1) as f64;
-            // let b = 0.25;
+            let fw = (image_width-1) as f64;
+            let fh = (image_height-1) as f64;
 
             let u = i as f64 / (image_width-1) as f64;
             let v = j as f64 / (image_height-1) as f64;
-            let temp_h = horizontal.multiply_by(u);
-            let temp_v = vertical.multiply_by(v);
-            let r = Ray{ origin: origin, dir: (lower_left_corner + temp_h + temp_v) - origin};
+            // let temp_h = u * horizontal;
+            // let temp_v = v * vertical;
+            // let r = Ray{ origin: origin, dir: lower_left_corner + temp_h + temp_v - origin};
+            let r = Ray{ origin: origin, dir: lower_left_corner + u*horizontal + v*vertical - origin};
 
             let pixel_colour = ray_colour(r);
             write_colour(&mut buffer, pixel_colour);
