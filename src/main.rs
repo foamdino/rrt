@@ -10,6 +10,7 @@ pub struct Vec3 {
 }
 
 type Colour = Vec3;
+type Point = Vec3;
 
 impl Vec3 {
 
@@ -142,20 +143,16 @@ impl Div<f64> for Vec3 {
     type Output = Vec3;
 
     fn div(self, rhs: f64) -> Self::Output {
-        Vec3{
-            x: (self.x / rhs).ceil(),
-            y: (self.y / rhs).ceil(),
-            z: (self.z / rhs).ceil()
-        }
+        self * (1.0/rhs)
     }
 }
 
 impl DivAssign for Vec3 {
     fn div_assign(&mut self, other: Self) {
         *self = Self {
-            x: (self.x / other.x).ceil(),
-            y: (self.y / other.y).ceil(),
-            z: (self.z / other.z).ceil()
+            x: (self.x / other.x),
+            y: (self.y / other.y),
+            z: (self.z / other.z)
         };
     }
 }
@@ -191,15 +188,30 @@ fn multiply_by(v: Vec3, t: f64) -> Vec3 {
 
 fn divide_by(v: Vec3, t: f64) -> Vec3 {
     multiply_by(v, 1.0/t)
-    // (1.0/t) * v
 }
 
 fn unit_vector(v: Vec3) -> Vec3 {
-    divide_by(v, v.length())
-    // v / v.length()
+    v / v.length()
+}
+
+fn dot(u: Vec3, v: Vec3) -> f64 {
+    u.x * v.x + u.y * v.y + u.z * v.z
+}
+
+fn hit_sphere(p: Point, radius: f64, r: Ray) -> bool {
+    let oc = r.origin - p;
+    let a = r.dir.length_squared();
+    let b = 2.0 * dot(oc, r.dir);
+    let c = dot(oc, oc) - radius * radius;
+    let discriminant = b*b - 4.0*a*c;
+    discriminant > 0.0
 }
 
 fn ray_colour(r: Ray) -> Vec3 {
+    if hit_sphere(Point{x: 0.0, y: 0.0, z: -1.0}, 0.5, r) {
+        return Colour{x: 1.0, y: 0.0, z: 0.0};
+    }
+
     let unit_direction = unit_vector(r.dir);
     let t = 0.5 * (unit_direction.y + 1.0);
     // let out = Colour{x: 1.0, y:  1.0, z: 1.0}.multiply_by(one_minus_t) + (Colour{x: 0.5, y: 0.7, z: 1.0}.multiply_by(t));
@@ -235,7 +247,6 @@ fn main() -> std::io::Result<()> {
     let origin = Vec3{x: 0.0, y: 0.0, z: 0.0};
     let horizontal = Vec3{ x: viewport_width, y: 0.0, z: 0.0};
     let vertical = Vec3{ x: 0.0,  y: viewport_height, z: 0.0};
-    // let lower_left_corner = origin - divide_by(horizontal, 2.0) - divide_by(vertical, 2.0) - Vec3{ x: 0.0, y: 0.0, z: focal_length};
     let lower_left_corner = origin - horizontal / 2.0 - vertical / 2.0 - Vec3{ x: 0.0, y: 0.0, z: focal_length};
     // println!("lower_left_corner: {:?}", lower_left_corner);
     // println!("hor / 2: {:?}", horizontal / 2.0);
@@ -248,14 +259,8 @@ fn main() -> std::io::Result<()> {
     for j in (0..image_height).rev() {
         println!("\r scan lines remaining: {}", j);
         for i in 0..image_width {
-            let fw = (image_width-1) as f64;
-            let fh = (image_height-1) as f64;
-
             let u = i as f64 / (image_width-1) as f64;
             let v = j as f64 / (image_height-1) as f64;
-            // let temp_h = u * horizontal;
-            // let temp_v = v * vertical;
-            // let r = Ray{ origin: origin, dir: lower_left_corner + temp_h + temp_v - origin};
             let r = Ray{ origin: origin, dir: lower_left_corner + u*horizontal + v*vertical - origin};
 
             let pixel_colour = ray_colour(r);
