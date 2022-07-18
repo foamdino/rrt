@@ -169,6 +169,17 @@ impl Ray {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct HitRecord {
+    pub p: Point,
+    pub normal: Vec3,
+    pub t: f64
+}
+
+pub trait SceneObject {
+    fn hittable(&self, r: Ray, t_min: f64, t_max: f64, rec: HitRecord) -> bool;
+}
+
 // Utility Functions
 fn add(u: Vec3, v: Vec3) -> Vec3 {
     Vec3{ x: u.x + v.x, y: u.y + v.y, z: u.z + v.z }
@@ -198,29 +209,35 @@ fn dot(u: Vec3, v: Vec3) -> f64 {
     u.x * v.x + u.y * v.y + u.z * v.z
 }
 
-fn hit_sphere(p: Point, radius: f64, r: Ray) -> bool {
+fn hit_sphere(p: Point, radius: f64, r: Ray) -> f64 {
     let oc = r.origin - p;
     let a = r.dir.length_squared();
-    let b = 2.0 * dot(oc, r.dir);
-    let c = dot(oc, oc) - radius * radius;
-    let discriminant = b*b - 4.0*a*c;
-    discriminant > 0.0
+    let half_b = dot(oc, r.dir);
+    let c = oc.length_squared() - radius * radius;
+    let discriminant = half_b*half_b - a*c;
+    if discriminant < 0.0 {
+        -1.0
+    } else {
+        -half_b - discriminant.sqrt() / a
+    }
 }
 
 fn ray_colour(r: Ray) -> Vec3 {
-    if hit_sphere(Point{x: 0.0, y: 0.0, z: -1.0}, 0.5, r) {
-        return Colour{x: 1.0, y: 0.0, z: 0.0};
+    let t = hit_sphere(Point{x: 0.0, y: 0.0, z: -1.0}, 0.5, r);
+    if t > 0.0 {
+        let n = unit_vector(r.at(t) - Vec3{x:0.0, y:0.0, z:-1.0});
+        0.5 * Colour{x: n.x+1.0, y: n.y+1.0, z: n.z+1.0}
+    } else {
+        let unit_direction = unit_vector(r.dir);
+        let t = 0.5 * (unit_direction.y + 1.0);
+        // let out = Colour{x: 1.0, y:  1.0, z: 1.0}.multiply_by(one_minus_t) + (Colour{x: 0.5, y: 0.7, z: 1.0}.multiply_by(t));
+        // println!("r: {:?}",r);
+        // println!("unit dir: {:?}",unit_direction);
+        // println!("t: {:?}",t);
+        // println!("t: {:?}",t.ceil());
+        // println!("color: {:?}",(1.0 - t) * Colour{x: 1.0, y: 1.0, z: 1.0} + t * Colour{x: 0.5, y: 0.7, z: 1.0});
+        (1.0 - t) * Colour{x: 1.0, y: 1.0, z: 1.0} + t * Colour{x: 0.5, y: 0.7, z: 1.0}
     }
-
-    let unit_direction = unit_vector(r.dir);
-    let t = 0.5 * (unit_direction.y + 1.0);
-    // let out = Colour{x: 1.0, y:  1.0, z: 1.0}.multiply_by(one_minus_t) + (Colour{x: 0.5, y: 0.7, z: 1.0}.multiply_by(t));
-    // println!("r: {:?}",r);
-    // println!("unit dir: {:?}",unit_direction);
-    // println!("t: {:?}",t);
-    // println!("t: {:?}",t.ceil());
-    // println!("color: {:?}",(1.0 - t) * Colour{x: 1.0, y: 1.0, z: 1.0} + t * Colour{x: 0.5, y: 0.7, z: 1.0});
-    (1.0 - t) * Colour{x: 1.0, y: 1.0, z: 1.0} + t * Colour{x: 0.5, y: 0.7, z: 1.0}
 }
 
 fn write_colour(buffer: &mut File, pixel_colour: Vec3) {
