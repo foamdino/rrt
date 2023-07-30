@@ -173,11 +173,87 @@ impl Ray {
 pub struct HitRecord {
     pub p: Point,
     pub normal: Vec3,
-    pub t: f64
+    pub t: f64,
+    pub front_face: bool,
+}
+
+impl HitRecord {
+    pub fn set_face_normal(&mut self, r: Ray, outward_normal: Vec3) {
+        if dot(r.dir, outward_normal) < 0.0 {
+            self.front_face = true
+        }
+        if self.front_face {
+            self.normal = outward_normal;
+        } else {
+            self.normal = -outward_normal;
+        }
+    }
 }
 
 pub trait SceneObject {
     fn hittable(&self, r: Ray, t_min: f64, t_max: f64, rec: HitRecord) -> bool;
+}
+
+pub struct Sphere {
+    pub centre: Point,
+    pub radius: f64
+}
+
+/*
+bool sphere::hit(const ray& r, double t_min, double t_max, hit_record& rec) const {
+    vec3 oc = r.origin() - center;
+    auto a = r.direction().length_squared();
+    auto half_b = dot(oc, r.direction());
+    auto c = oc.length_squared() - radius*radius;
+
+    auto discriminant = half_b*half_b - a*c;
+    if (discriminant < 0) return false;
+    auto sqrtd = sqrt(discriminant);
+
+    // Find the nearest root that lies in the acceptable range.
+    auto root = (-half_b - sqrtd) / a;
+    if (root < t_min || t_max < root) {
+        root = (-half_b + sqrtd) / a;
+        if (root < t_min || t_max < root)
+            return false;
+    }
+
+    rec.t = root;
+    rec.p = r.at(rec.t);
+    rec.normal = (rec.p - center) / radius;
+
+    return true;
+}
+ */
+impl SceneObject for Sphere {
+    fn hittable(&self, r: Ray, t_min: f64, t_max: f64, mut rec: HitRecord) -> bool {
+        let oc = r.origin - self.centre;
+        let a = r.dir.length_squared();
+        let half_b = dot(oc, r.dir);
+        let c = oc.length_squared() - self.radius*self.radius;
+
+        let discriminant = half_b*half_b - a*c;
+        if discriminant < 0.0 {
+            return false;
+        }
+        
+        let sqrtd = discriminant.sqrt();
+        let mut root = (-half_b - sqrtd) / a;
+        if root < t_min || t_max < root {
+            root = (-half_b + sqrtd) / a;
+            if root < t_min || t_max < root {
+                return false;
+            }
+        }
+
+        rec.t = root;
+        rec.p = r.at(rec.t);
+
+        let outward_normal = rec.p - self.centre;
+        rec.set_face_normal(r, outward_normal);
+
+        return true;
+    }
 }
 
 // Utility Functions
