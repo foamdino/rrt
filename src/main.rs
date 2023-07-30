@@ -224,10 +224,12 @@ fn hit_sphere(p: Point, radius: f64, r: Ray) -> f64 {
 
 fn ray_colour(r: Ray) -> Vec3 {
     let t = hit_sphere(Point{x: 0.0, y: 0.0, z: -1.0}, 0.5, r);
+    // if t > 0 then we intersected with a point on the sphere
     if t > 0.0 {
         let n = unit_vector(r.at(t) - Vec3{x:0.0, y:0.0, z:-1.0});
         0.5 * Colour{x: n.x+1.0, y: n.y+1.0, z: n.z+1.0}
-    } else {
+        //Colour{x:0.0, y:0.0, z:0.0}
+    } else { // we generate a background colour
         let unit_direction = unit_vector(r.dir);
         let t = 0.5 * (unit_direction.y + 1.0);
         // let out = Colour{x: 1.0, y:  1.0, z: 1.0}.multiply_by(one_minus_t) + (Colour{x: 0.5, y: 0.7, z: 1.0}.multiply_by(t));
@@ -247,7 +249,7 @@ fn write_colour(buffer: &mut File, pixel_colour: Vec3) {
     let ib = (255.999 * pixel_colour.z).ceil() as i32;
 
     let pixel = format!("{} {} {}\n", ir, ig, ib);
-    buffer.write(&pixel.as_bytes());
+    buffer.write(&pixel.as_bytes()).expect("unable to write to buffer");
 }
 
 fn main() -> std::io::Result<()> {
@@ -271,7 +273,7 @@ fn main() -> std::io::Result<()> {
 
     let header = format!("P3\n{} {}\n255\n", image_width, image_height);
     let mut buffer = File::create("output.ppm")?;
-    buffer.write(&header.as_bytes());
+    buffer.write(&header.as_bytes()).expect("unable to write to buffer");
 
     for j in (0..image_height).rev() {
         println!("\r scan lines remaining: {}", j);
