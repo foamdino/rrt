@@ -188,71 +188,96 @@ impl HitRecord {
             self.normal = -outward_normal;
         }
     }
+
+    // instantiate a blank/default hitrecord
+    pub fn new() -> Self {
+        Self {
+            p: Point{x:0.0, y:0.0, z:0.0},
+            normal: Vec3{x:0.0, y:0.0, z:0.0},
+            t: 0.0,
+            front_face: false
+        }
+    }
 }
 
 pub trait SceneObject {
-    fn hittable(&self, r: Ray, t_min: f64, t_max: f64, rec: HitRecord) -> bool;
+    fn hittable(&self, r: Ray, t_min: f64, t_max: f64, rec: HitRecord) -> (bool, HitRecord);
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct Sphere {
     pub centre: Point,
     pub radius: f64
 }
 
-/*
-bool sphere::hit(const ray& r, double t_min, double t_max, hit_record& rec) const {
-    vec3 oc = r.origin() - center;
-    auto a = r.direction().length_squared();
-    auto half_b = dot(oc, r.direction());
-    auto c = oc.length_squared() - radius*radius;
-
-    auto discriminant = half_b*half_b - a*c;
-    if (discriminant < 0) return false;
-    auto sqrtd = sqrt(discriminant);
-
-    // Find the nearest root that lies in the acceptable range.
-    auto root = (-half_b - sqrtd) / a;
-    if (root < t_min || t_max < root) {
-        root = (-half_b + sqrtd) / a;
-        if (root < t_min || t_max < root)
-            return false;
-    }
-
-    rec.t = root;
-    rec.p = r.at(rec.t);
-    rec.normal = (rec.p - center) / radius;
-
-    return true;
-}
- */
 impl SceneObject for Sphere {
-    fn hittable(&self, r: Ray, t_min: f64, t_max: f64, mut rec: HitRecord) -> bool {
+    fn hittable(&self, r: Ray, t_min: f64, t_max: f64, rec: HitRecord) -> (bool, HitRecord) {
+        let mut temp_rec = HitRecord::new();
         let oc = r.origin - self.centre;
         let a = r.dir.length_squared();
         let half_b = dot(oc, r.dir);
         let c = oc.length_squared() - self.radius*self.radius;
 
         let discriminant = half_b*half_b - a*c;
+
         if discriminant < 0.0 {
-            return false;
+            return (false, temp_rec);
         }
         
-        let sqrtd = discriminant.sqrt();
-        let mut root = (-half_b - sqrtd) / a;
-        if root < t_min || t_max < root {
-            root = (-half_b + sqrtd) / a;
-            if root < t_min || t_max < root {
-                return false;
+        let mut root = (-half_b - discriminant.sqrt()) / a;
+        if root <= t_min || t_max <= root {
+            root = (-half_b + discriminant.sqrt()) / a;
+            if root <= t_min || t_max <= root {
+                return (false, temp_rec);
             }
         }
 
-        rec.t = root;
-        rec.p = r.at(rec.t);
+        temp_rec.t = root;
+        temp_rec.p = r.at(temp_rec.t);
 
-        let outward_normal = rec.p - self.centre;
-        rec.set_face_normal(r, outward_normal);
+        let outward_normal = temp_rec.p - self.centre;
+        temp_rec.set_face_normal(r, outward_normal);
 
-        return true;
+        // println!("hittable rec: {:?}", temp_rec);
+        (true, temp_rec)
+    }
+}
+
+pub struct SceneObjects {
+    pub hittables_list: Vec<Box<dyn SceneObject>>,
+}
+
+impl SceneObjects {
+
+    fn new() -> Self {
+        Self {
+            hittables_list: Vec::new()
+        }
+    }
+
+    fn clear(&mut self) {
+        self.hittables_list.clear()
+    }
+
+    fn add(&mut self, obj: Sphere) {
+        self.hittables_list.push(Box::new(obj));
+    }
+
+    fn hit(&mut self, r: Ray, t_min: f64, t_max: f64) -> (bool, HitRecord) {
+        let mut temp_rec = HitRecord::new();
+        let mut hit_anything = false;
+        let mut closest_so_far = t_max;
+
+        for obj in self.hittables_list.iter() {
+            let (h, hit_rec) = obj.hittable(r, t_min, closest_so_far, temp_rec);
+            if h {
+                hit_anything = true;
+                closest_so_far = temp_rec.t;
+                temp_rec = hit_rec;
+            }
+        }
+
+        (hit_anything, temp_rec)
     }
 }
 
@@ -298,24 +323,44 @@ fn hit_sphere(p: Point, radius: f64, r: Ray) -> f64 {
     }
 }
 
-fn ray_colour(r: Ray) -> Vec3 {
-    let t = hit_sphere(Point{x: 0.0, y: 0.0, z: -1.0}, 0.5, r);
-    // if t > 0 then we intersected with a point on the sphere
-    if t > 0.0 {
-        let n = unit_vector(r.at(t) - Vec3{x:0.0, y:0.0, z:-1.0});
-        0.5 * Colour{x: n.x+1.0, y: n.y+1.0, z: n.z+1.0}
-        //Colour{x:0.0, y:0.0, z:0.0}
-    } else { // we generate a background colour
+fn ray_colour(r: Ray, world: &mut SceneObjects) -> Vec3 {
+    let (hit, rec) = world.hit(r, 0.0, f64::INFINITY);
+
+    // let mut new_out_colour = Colour{x: 0.0, y: 0.0, z: 0.0};
+    // let mut old_out_colour = Colour{x: 0.0, y: 0.0, z: 0.0};
+    
+    if hit {
+        let n = unit_vector(r.at(rec.t) - Vec3{x:0.0, y:0.0, z:-1.0});
+        // println!("ray_colour rec: {:?}", rec);
+        // 0.5 * (rec.normal + color(1,1,1);
+        // 0.5 * Colour{x: n.x+1.0, y: n.y+1.0, z: n.z+1.0}
+        0.5 * Colour{x: rec.normal.x+1.0, y: rec.normal.y+1.0, z: rec.normal.z+1.0}
+        // 0.5 * rec.normal + Colour{x: 1.0, y: 1.0, z: 1.0}
+    } else {
         let unit_direction = unit_vector(r.dir);
         let t = 0.5 * (unit_direction.y + 1.0);
-        // let out = Colour{x: 1.0, y:  1.0, z: 1.0}.multiply_by(one_minus_t) + (Colour{x: 0.5, y: 0.7, z: 1.0}.multiply_by(t));
-        // println!("r: {:?}",r);
-        // println!("unit dir: {:?}",unit_direction);
-        // println!("t: {:?}",t);
-        // println!("t: {:?}",t.ceil());
-        // println!("color: {:?}",(1.0 - t) * Colour{x: 1.0, y: 1.0, z: 1.0} + t * Colour{x: 0.5, y: 0.7, z: 1.0});
         (1.0 - t) * Colour{x: 1.0, y: 1.0, z: 1.0} + t * Colour{x: 0.5, y: 0.7, z: 1.0}
     }
+
+    // let t: f64 = hit_sphere(Point{x: 0.0, y: 0.0, z: -1.0}, 0.5, r);
+    // // if t > 0 then we intersected with a point on the sphere
+    // if t > 0.0 {
+    //     let n = unit_vector(r.at(t) - Vec3{x:0.0, y:0.0, z:-1.0});
+    //     // println!("t: {:?} old n: {:?}", t, n);
+    //     old_out_colour = 0.5 * Colour{x: n.x+1.0, y: n.y+1.0, z: n.z+1.0};
+    //     //Colour{x:0.0, y:0.0, z:0.0}
+    // } else { // we generate a background colour
+    //     let unit_direction = unit_vector(r.dir);
+    //     let t = 0.5 * (unit_direction.y + 1.0);
+    //     // let out = Colour{x: 1.0, y:  1.0, z: 1.0}.multiply_by(one_minus_t) + (Colour{x: 0.5, y: 0.7, z: 1.0}.multiply_by(t));
+    //     // println!("r: {:?}",r);
+    //     // println!("unit dir: {:?}",unit_direction);
+    //     // println!("t: {:?}",t);
+    //     // println!("t: {:?}",t.ceil());
+    //     // println!("color: {:?}",(1.0 - t) * Colour{x: 1.0, y: 1.0, z: 1.0} + t * Colour{x: 0.5, y: 0.7, z: 1.0});
+    //    old_out_colour = (1.0 - t) * Colour{x: 1.0, y: 1.0, z: 1.0} + t * Colour{x: 0.5, y: 0.7, z: 1.0};
+    // }
+
 }
 
 fn write_colour(buffer: &mut File, pixel_colour: Vec3) {
@@ -334,6 +379,11 @@ fn main() -> std::io::Result<()> {
     let image_width = 400;
     let image_height = (image_width as f64 / aspect_ratio).ceil() as i32;
 
+    // World
+    let mut world = SceneObjects::new();
+    world.add(Sphere { centre: Point{x: 0.0, y: 0.0, z: -1.0}, radius: 0.5 });
+    world.add(Sphere { centre: Point{x: 0.0, y: -100.5, z: -1.0}, radius: 100.0 });
+
     // Camera
     let viewport_height = 2.0;
     let viewport_width = aspect_ratio * viewport_height;
@@ -343,22 +393,19 @@ fn main() -> std::io::Result<()> {
     let horizontal = Vec3{ x: viewport_width, y: 0.0, z: 0.0};
     let vertical = Vec3{ x: 0.0,  y: viewport_height, z: 0.0};
     let lower_left_corner = origin - horizontal / 2.0 - vertical / 2.0 - Vec3{ x: 0.0, y: 0.0, z: focal_length};
-    // println!("lower_left_corner: {:?}", lower_left_corner);
-    // println!("hor / 2: {:?}", horizontal / 2.0);
-    // println!("ver / 2: {:?}", vertical / 2.0);
 
     let header = format!("P3\n{} {}\n255\n", image_width, image_height);
     let mut buffer = File::create("output.ppm")?;
     buffer.write(&header.as_bytes()).expect("unable to write to buffer");
 
     for j in (0..image_height).rev() {
-        println!("\r scan lines remaining: {}", j);
+        //println!("\r scan lines remaining: {}", j);
         for i in 0..image_width {
             let u = i as f64 / (image_width-1) as f64;
             let v = j as f64 / (image_height-1) as f64;
             let r = Ray{ origin: origin, dir: lower_left_corner + u*horizontal + v*vertical - origin};
 
-            let pixel_colour = ray_colour(r);
+            let pixel_colour = ray_colour(r, &mut world);
             write_colour(&mut buffer, pixel_colour);
         }
     }
